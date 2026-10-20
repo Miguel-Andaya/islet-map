@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>ISLET Connect – Starlink Deployment Map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root { --glass: rgba(15,23,42,.78); --line: rgba(255,255,255,.14); --txt: #f1f5f9; --mut: #94a3b8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Inter', Arial, sans-serif; }
+    #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+    .panel { position: absolute; top: 16px; left: 16px; width: 290px; max-height: calc(100% - 32px); overflow-y: auto;
+             background: var(--glass); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+             color: var(--txt); padding: 18px; border-radius: 18px; border: 1px solid var(--line);
+             box-shadow: 0 10px 40px rgba(0,0,0,.45); animation: slideIn .7s cubic-bezier(.2,.8,.2,1) both; }
+    .brand { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: #38bdf8; font-weight: 700; }
+    .panel h2 { margin: 2px 0 14px; font-size: 19px; font-weight: 700; }
+    .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+    .stat { background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 12px; padding: 9px 4px; text-align: center; transition: transform .2s; }
+    .stat:hover { transform: translateY(-3px); }
+    .stat .num { display: block; font-size: 20px; font-weight: 700; }
+    .stat .lbl { font-size: 10px; color: var(--mut); text-transform: uppercase; letter-spacing: .05em; }
+    .sec { font-size: 10px; color: var(--mut); text-transform: uppercase; letter-spacing: .1em; margin: 14px 0 8px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+    .chip input { display: none; }
+    .chip span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+                 border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--mut); cursor: pointer; transition: all .25s; user-select: none; }
+    .chip span i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; opacity: .5; transition: opacity .25s; }
+    .chip input:checked + span { background: rgba(255,255,255,.14); color: #fff; border-color: rgba(255,255,255,.35); }
+    .chip input:checked + span i { opacity: 1; }
+    .chip span:hover { transform: translateY(-2px); }
+    .seg { display: flex; background: rgba(255,255,255,.06); border-radius: 10px; padding: 3px; gap: 3px; }
+    .seg button { flex: 1; border: 0; background: transparent; color: var(--mut); padding: 7px 0; border-radius: 8px; font: 600 12px 'Inter', Arial; cursor: pointer; transition: all .25s; }
+    .seg button.on { background: #38bdf8; color: #0f172a; }
+    .btn { width: 100%; margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.06);
+           color: #fff; font: 600 12px 'Inter', Arial; cursor: pointer; transition: all .25s; }
+    .btn:hover { background: #38bdf8; color: #0f172a; transform: translateY(-2px); }
+    .note { font-size: 11px; color: var(--mut); margin-top: 14px; line-height: 1.5; }
+    .pin { width: 22px; height: 22px; }
+    .core { position: relative; width: 100%; height: 100%; border-radius: 50%; background: var(--c); border: 3px solid #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,.55); cursor: pointer; transition: transform .2s;
+            animation: pop .6s cubic-bezier(.34,1.56,.64,1) backwards; }
+    .core:hover { transform: scale(1.35); }
+    .core.sample { border-style: dashed; }
+    .core.active::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid var(--c); animation: pulse 2.2s ease-out infinite; }
+    .mapboxgl-popup-content { border-radius: 16px !important; padding: 16px 18px !important; min-width: 230px;
+                              box-shadow: 0 12px 40px rgba(0,0,0,.4) !important; font-family: 'Inter', Arial, sans-serif; animation: rise .3s ease both; }
+    .popup h3 { margin: 8px 0 2px; font-size: 16px; color: #0f172a; }
+    .popup .sub { margin: 0 0 12px; font-size: 12px; color: #64748b; }
+    .popup .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .popup small { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #94a3b8; }
+    .popup b { font-size: 13px; color: #0f172a; }
+    .popup .src { margin: 12px 0 0; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #64748b; }
+    .tag { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
+    .search { display: flex; gap: 6px; margin-bottom: 4px; }
+    .search input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.08);
+                    color: #fff; font: 13px 'Inter', Arial; outline: none; transition: border-color .25s, box-shadow .25s; }
+    .search input::placeholder { color: var(--mut); }
+    .search input:focus { border-color: #38bdf8; box-shadow: 0 0 0 3px rgba(56,189,248,.25); }
+    .search button { border: 0; border-radius: 10px; padding: 0 14px; background: #38bdf8; color: #0f172a; font: 700 12px 'Inter', Arial; cursor: pointer; transition: transform .2s; }
+    .search button:hover { transform: translateY(-2px); }
+    #qMsg { font-size: 11px; color: var(--mut); min-height: 14px; margin-bottom: 12px; }
+    @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @keyframes pulse { 0% { transform: scale(1); opacity: .9; } 100% { transform: scale(2.6); opacity: 0; } }
+    @keyframes slideIn { from { transform: translateX(-30px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes rise { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @media (max-width: 600px) { .panel { width: calc(100% - 32px); max-height: 46%; } }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div class="panel">
+    <div class="brand">ISLET Connect</div>
+    <h2>Starlink Deployment Map</h2>
+    <div class="search"><input id="q" placeholder="Search a place in the Philippines"><button id="qGo">Go</button></div>
+    <div id="qMsg"></div>
+    <div class="stats" id="stats"></div>
+    <div class="sec">Filter sites</div>
+    <div class="chips">
+      <label class="chip"><input type="checkbox" id="fActive" checked><span><i style="background:#34d399"></i>Active</span></label>
+      <label class="chip"><input type="checkbox" id="fPlanned" checked><span><i style="background:#fbbf24"></i>Planned</span></label>
+      <label class="chip"><input type="checkbox" id="fInactive" checked><span><i style="background:#f87171"></i>Inactive</span></label>
+      <label class="chip"><input type="checkbox" id="fIslands" checked><span><i style="background:#60a5fa"></i>Islands</span></label>
+      <label class="chip"><input type="checkbox" id="fTerrain" checked><span><i style="background:#a78bfa"></i>3D terrain</span></label>
+    </div>
+    <div class="sec">Map style</div>
+    <div class="seg">
+      <button class="on" data-style="mapbox://styles/mapbox/satellite-streets-v12">Satellite</button>
+      <button data-style="mapbox://styles/mapbox/dark-v11">Dark</button>
+      <button data-style="mapbox://styles/mapbox/light-v11">Light</button>
+    </div>
+    <button class="btn" id="zoomIslets">Fly to Lapu-Lapu ISLET islands</button>
+    <button class="btn" id="zoomAll">Show all sites</button>
+    <div class="note">Dashed marker border = sample data. Locations are approximate. Prototype only.</div>
+  </div>
+
+  <script>
+    // STEP 1: Mapbox PUBLIC token
+    mapboxgl.accessToken = 'pk.eyJ1IjoibWlndWVsYW5kYXlhIiwiYSI6ImNtdjdmbzJnaDA1NzQyd3B2Yjg0eTV1eHMifQ.nNvwEAO1QrS4WtCNm6cscw';
+
+    // Coordinates are [longitude, latitude]. APPROXIMATE.
+    const islands = [
+      { name: "Gilutongan Island", coords: [123.9890, 10.2140], radiusKm: 0.9 },
+      { name: "Pangan-an Island",  coords: [124.0450, 10.2000], radiusKm: 0.8 },
+      { name: "Caohagan Island",   coords: [124.0600, 10.1700], radiusKm: 0.9 }
+    ];
+
+    const PUBLIC = "Public (CViSNet news)";
+    const SAMPLE = "Sample data";
+
+    // Real sites from public CViSNet news (status/bandwidth/users/contact to be confirmed)
+    const sites = [
+      { name: "Pangan-an National High School", island: "Pangan-an Island", city: "Lapu-Lapu City, Cebu",
+        coords: [124.0455, 10.2005], status: "Inactive", installed: "2023-05-17", bandwidth: "To be confirmed",
+        users: "To be confirmed", contact: "CViSNet Foundation", source: PUBLIC },
+      { name: "Caohagan Integrated School", island: "Caohagan Island", city: "Lapu-Lapu City, Cebu",
+        coords: [124.0605, 10.1705], status: "Active", installed: "2023-11-12", bandwidth: "To be confirmed",
+        users: "To be confirmed", contact: "CViSNet Foundation", source: PUBLIC },
+      { name: "Gilutongan Wireless Hub", island: "Gilutongan Island", city: "Lapu-Lapu City, Cebu",
+        coords: [123.9895, 10.2145], status: "Active", installed: "To be confirmed", bandwidth: "To be confirmed",
+        users: "To be confirmed", contact: "CViSNet Foundation", source: PUBLIC }
+    ];
+
+    // SAMPLE sites: [name, island/area, city, lng, lat, status, installed, bandwidth, users]
+    const sampleRows = [
+      ["Bantayan Elementary School", "Bantayan Island", "Bantayan, Cebu", 123.7217, 11.1700, "Active", "2025-02-14", "100 Mbps", 150],
+      ["Madridejos Barangay Hall", "Bantayan Island", "Madridejos, Cebu", 123.7300, 11.2600, "Planned", "Q1 2027", "100 Mbps", 0],
+      ["Malapascua Integrated School", "Malapascua Island", "Daanbantayan, Cebu", 124.1150, 11.3350, "Active", "2025-05-21", "100 Mbps", 130],
+      ["Poro Community Learning Hub", "Camotes Islands", "Poro, Cebu", 124.4200, 10.6300, "Active", "2025-04-09", "100 Mbps", 175],
+      ["Tudela Barangay Hall", "Camotes Islands", "Tudela, Cebu", 124.5500, 10.6300, "Planned", "Q1 2027", "100 Mbps", 0],
+      ["Pilar Rural Health Unit", "Camotes Islands", "Pilar, Cebu", 124.5800, 10.6000, "Inactive", "2024-08-30", "50 Mbps", 45],
+      ["Olango Island Elementary School", "Olango Island", "Lapu-Lapu City, Cebu", 123.9600, 10.2600, "Active", "2025-07-18", "100 Mbps", 190],
+      ["Oslob Barangay School", "Southern Cebu", "Oslob, Cebu", 123.4400, 9.5200, "Active", "2025-08-22", "100 Mbps", 140],
+      ["Pamilacan Island School", "Pamilacan Island", "Baclayon, Bohol", 123.9400, 9.4900, "Planned", "Q2 2027", "100 Mbps", 0],
+      ["Siquijor Provincial School", "Siquijor", "Siquijor", 123.5100, 9.2000, "Active", "2025-11-11", "100 Mbps", 230],
+      ["Lazi Barangay Hall", "Siquijor", "Lazi, Siquijor", 123.6300, 9.1300, "Planned", "Q3 2027", "50 Mbps", 0],
+      ["Sipalay Coastal School", "Negros Occidental", "Sipalay, Negros Occ.", 122.4000, 9.7500, "Inactive", "2024-11-02", "50 Mbps", 55],
+    ];
+    sampleRows.forEach(r => sites.push({
+      name: "Sample – " + r[0], island: r[1], city: r[2], coords: [r[3], r[4]], status: r[5],
+      installed: r[6], bandwidth: r[7], users: r[8], contact: "Sample contact", source: SAMPLE
+    }));
+
+    const colors = { "Active": "#34d399", "Planned": "#fbbf24", "Inactive": "#f87171" };
+    const PAD = { top: 80, bottom: 80, left: 350, right: 80 };
+
+    const map = new mapboxgl.Map({
+      container: 'map',
+      style: 'mapbox://styles/mapbox/satellite-streets-v12',
+      center: [122, 12],
+      zoom: 5
+    });
+    map.addControl(new mapboxgl.NavigationControl());
+    map.addControl(new mapboxgl.FullscreenControl());
+    map.addControl(new mapboxgl.GeolocateControl({ positionOptions: { enableHighAccuracy: true }, trackUserLocation: true }));
+    map.addControl(new mapboxgl.ScaleControl({ maxWidth: 100, unit: 'metric' }), 'bottom-right');
+
+    function circle(center, km) {
+      const pts = [];
+      for (let i = 0; i <= 48; i++) {
+        const a = (i / 48) * 2 * Math.PI;
+        pts.push([center[0] + (km / (111 * Math.cos(center[1] * Math.PI / 180))) * Math.cos(a),
+                  center[1] + (km / 111) * Math.sin(a)]);
+      }
+      return pts;
+    }
+
+    const allBounds = new mapboxgl.LngLatBounds();
+    const markers = sites.map((s, i) => {
+      const c = colors[s.status];
+      const el = document.createElement('div'); el.className = 'pin';
+      const core = document.createElement('div');
+      core.className = 'core ' + s.status.toLowerCase() + (s.source === SAMPLE ? ' sample' : '');
+      core.style.setProperty('--c', c);
+      core.style.animationDelay = (500 + i * 80) + 'ms';
+      el.appendChild(core);
+      const popup = new mapboxgl.Popup({ offset: 20, maxWidth: '300px' }).setHTML(`
+        <div class="popup">
+          <span class="tag" style="background:${c}">${s.status}</span>
+          <h3>${s.name}</h3>
+          <p class="sub">${s.island} · ${s.city}</p>
+          <div class="grid">
+            <div><small>${s.status === 'Planned' ? 'Target install' : 'Installed'}</small><b>${s.installed}</b></div>
+            <div><small>Bandwidth</small><b>${s.bandwidth}</b></div>
+            <div><small>Users served</small><b>${s.users}</b></div>
+            <div><small>Contact</small><b>${s.contact}</b></div>
+          </div>
+          <p class="src">Data source: ${s.source}</p>
+        </div>`);
+      new mapboxgl.Marker(el).setLngLat(s.coords).setPopup(popup).addTo(map);
+      el.addEventListener('click', () => map.flyTo({ center: s.coords, zoom: Math.max(map.getZoom(), 10), speed: 0.9 }));
+      allBounds.extend(s.coords);
+      return { el, status: s.status };
+    });
+    map.fitBounds(allBounds, { padding: PAD, pitch: 0, bearing: 0, duration: 2200 });
+
+    map.on('style.load', () => {
+      map.addSource('mapbox-dem', { type: 'raster-dem', url: 'mapbox://mapbox.mapbox-terrain-dem-v1', tileSize: 512, maxzoom: 14 });
+      map.setFog({});
+      map.addSource('islands', { type: 'geojson', data: { type: 'FeatureCollection',
+        features: islands.map(i => ({ type: 'Feature', properties: { name: i.name },
+          geometry: { type: 'Polygon', coordinates: [circle(i.coords, i.radiusKm)] } })) } });
+      map.addLayer({ id: 'islands-fill', type: 'fill', source: 'islands',
+        paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.3 } });
+      map.addLayer({ id: 'islands-line', type: 'line', source: 'islands',
+        paint: { 'line-color': '#3b82f6', 'line-width': 2 } });
+      map.addSource('island-labels', { type: 'geojson', data: { type: 'FeatureCollection',
+        features: islands.map(i => ({ type: 'Feature', properties: { name: i.name },
+          geometry: { type: 'Point', coordinates: [i.coords[0], i.coords[1] + i.radiusKm / 111 + 0.002] } })) } });
+      map.addLayer({ id: 'islands-label', type: 'symbol', source: 'island-labels', minzoom: 9,
+        layout: { 'text-field': ['get', 'name'], 'text-size': 13 },
+        paint: { 'text-color': '#fff', 'text-halo-color': '#1e3a8a', 'text-halo-width': 2 } });
+      refresh();
+    });
+
+    function refresh() {
+      if (map.getSource('mapbox-dem')) map.setTerrain(fTerrain.checked ? { source: 'mapbox-dem', exaggeration: 1.4 } : null);
+      const show = { Active: fActive.checked, Planned: fPlanned.checked, Inactive: fInactive.checked };
+      markers.forEach(m => { m.el.style.display = show[m.status] ? 'block' : 'none'; });
+      if (map.getLayer('islands-fill')) {
+        const v = fIslands.checked ? 'visible' : 'none';
+        ['islands-fill', 'islands-line', 'islands-label'].forEach(id => map.setLayoutProperty(id, 'visibility', v));
+      }
+    }
+    ['fActive', 'fPlanned', 'fInactive', 'fIslands', 'fTerrain'].forEach(id => document.getElementById(id).addEventListener('change', refresh));
+
+    document.getElementById('zoomIslets').onclick = () => map.flyTo({ center: [124.03, 10.19], zoom: 11.5, pitch: 50, bearing: -15, duration: 2500 });
+    document.getElementById('zoomAll').onclick = () => map.fitBounds(allBounds, { padding: PAD, pitch: 0, bearing: 0, duration: 2200 });
+
+    const count = st => sites.filter(s => s.status === st).length;
+    const cards = [['Total', sites.length, '#fff'], ['Active', count('Active'), '#34d399'], ['Planned', count('Planned'), '#fbbf24'], ['Inactive', count('Inactive'), '#f87171']];
+    document.getElementById('stats').innerHTML = cards.map(c =>
+      `<div class="stat"><span class="num" data-n="${c[1]}" style="color:${c[2]}">0</span><span class="lbl">${c[0]}</span></div>`).join('');
+    document.querySelectorAll('.num').forEach(n => {
+      const t = +n.dataset.n; let v = 0;
+      const step = () => { v += Math.max(0.2, t / 40); if (v >= t) { n.textContent = t; return; } n.textContent = Math.floor(v); requestAnimationFrame(step); };
+      step();
+    });
+    document.querySelectorAll('.seg button').forEach(b => b.onclick = () => {
+      document.querySelectorAll('.seg button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on'); map.setStyle(b.dataset.style);
+    });
+
+    // Search using the Mapbox Geocoding API
+    let searchMarker;
+    async function search() {
+      const q = document.getElementById('q').value.trim();
+      const msg = document.getElementById('qMsg');
+      if (!q) return;
+      msg.textContent = 'Searching...';
+      try {
+        const r = await fetch(`https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(q)}&country=ph&limit=1&access_token=${mapboxgl.accessToken}`);
+        const d = await r.json();
+        const f = d.features && d.features[0];
+        if (!f) { msg.textContent = 'No results found.'; return; }
+        const c = f.geometry.coordinates;
+        const label = f.properties.full_address || f.properties.place_formatted || f.properties.name;
+        if (searchMarker) searchMarker.remove();
+        searchMarker = new mapboxgl.Marker({ color: '#a78bfa' }).setLngLat(c).setPopup(new mapboxgl.Popup().setText(label)).addTo(map);
+        map.flyTo({ center: c, zoom: 12, pitch: 45, duration: 2500 });
+        msg.textContent = label;
+      } catch (e) { msg.textContent = 'Search failed. Check your token and internet.'; }
+    }
+    document.getElementById('qGo').onclick = search;
+    document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  </script>
+</body>
+</html>
